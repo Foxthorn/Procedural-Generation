@@ -9,11 +9,26 @@ public class MapGenerator : MonoBehaviour {
 	public List<GameObject> Rooms = new List<GameObject>();
 	public List<GameObject> Corridors = new List<GameObject>();
 	public List<GameObject> Ends = new List<GameObject>();
+
+	List<Transform> newExits = new List<Transform>();
+	List<Transform> pendingExits = new List<Transform>();
+	List<GameObject> map = new List<GameObject>();
+	GameObject newRoom;
+	int numRoomsPlaced;
 	// Use this for initialization
 	void Start () {
+		// Random.seed = 2;
 		int i = Random.Range(0, Rooms.Count);
 		Instantiate(Rooms[i]);
-		GenerateMap(Rooms[i]);
+		pendingExits = GetExits(Rooms[i].transform);
+		map.Add(Rooms[i]);
+	}
+
+	void Update()
+	{
+		CheckCollisions();
+		if (iterations > 0)
+			GenerateMap();
 	}
 
 	List<Transform> GetExits(Transform room)
@@ -37,34 +52,68 @@ public class MapGenerator : MonoBehaviour {
 		newModule.transform.position += correctiveTranslation;
 	}
 	
-	void GenerateMap(GameObject room)
+	void GenerateMap()
 	{
-		var pendingExits = GetExits(room.transform);
-		var newExits = new List<Transform>();
-		while (iterations > 0)
+		newExits.Clear();
+		foreach (var exit in pendingExits)
 		{
-			newExits.Clear();
-			foreach (var exit in pendingExits)
+			if (exit.transform.parent.transform.tag == "Room")
+				newRoom = Instantiate(Corridors[Random.Range(0, Corridors.Count)]);
+			else
+				newRoom = Instantiate(Rooms[Random.Range(0, Rooms.Count)]);
+			var exits = GetExits(newRoom.transform);	
+			map.Add(newRoom);
+			AlignExits(exit, exits[0]);
+			numRoomsPlaced += 1;
+			for(int i = 0; i < exits.Count; i++)
 			{
-				var newRoom = room;
-				if (exit.transform.parent.transform.tag == "Room")
-					newRoom = Instantiate(Corridors[Random.Range(0, Corridors.Count)]);
-				else
-					newRoom = Instantiate(Rooms[Random.Range(0, Rooms.Count)]);
-				var ex = GetExits(newRoom.transform);	
-				AlignExits(exit, ex[0]);
-				for(int i = 0; i < ex.Count; i++)
+				if (i != 0)
 				{
-					if (i != 0)
+					newExits.Add(exits[i]);
+				}
+			}
+		}
+		pendingExits.Clear();
+		iterations -= 1;
+	}
+
+	void RemoveExits(int index)
+	{
+		foreach(Transform child in map[index].transform)
+		{
+			if (child.tag == "Exit")
+			{
+				newExits.Remove(child);
+			}
+		}
+	}
+
+	void CheckCollisions()
+	{
+		List<int> indices = new List<int>();
+		for(int i = 0; i <= numRoomsPlaced; i++)
+		{
+			var index = map.Count - 1 - i;
+			foreach(Transform child in map[index].transform)
+			{
+				if (child.tag != "Exit")
+				{
+					var script = child.gameObject.GetComponent<CollisionCheck>();
+					if (script.colliding)
 					{
-						newExits.Add(ex[i]);
+						indices.Add(index);
+						RemoveExits(index);
 					}
 				}
 			}
-			pendingExits.Clear();
-			pendingExits.AddRange(newExits);
-			iterations -= 1;
 		}
+		foreach(int i in indices)
+		{
+			Destroy(map[i]);
+			map.Remove(map[i]);
+		}
+		pendingExits.AddRange(newExits);
+		numRoomsPlaced = 0;	
 	}
 
 	float Azimuth(Vector3 vector)
